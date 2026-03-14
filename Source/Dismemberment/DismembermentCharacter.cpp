@@ -47,6 +47,8 @@ ADismembermentCharacter::ADismembermentCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
+	CurrentWeapon = nullptr;
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -64,6 +66,8 @@ void ADismembermentCharacter::BeginPlay()
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
 	}
+
+	SpawnAndEquipWeapon();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -83,6 +87,9 @@ void ADismembermentCharacter::SetupPlayerInputComponent(class UInputComponent* P
 
 		//Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADismembermentCharacter::Look);
+
+		//attacking
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Triggered, this, &ADismembermentCharacter::Attack);
 
 	}
 
@@ -122,6 +129,41 @@ void ADismembermentCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
+}
+
+void ADismembermentCharacter::Attack(const FInputActionValue& Value)
+{
+	if (!AttackMontage || !CurrentWeapon)
+	{
+		return;
+	}
+
+	PlayAnimMontage(AttackMontage);
+}
+
+void ADismembermentCharacter::SpawnAndEquipWeapon()
+{
+	if (!WeaponClass)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = GetInstigator();
+
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponActor>(WeaponClass, SpawnParams);
+	if (!CurrentWeapon)
+	{
+		return;
+	}
+
+	// Attach to the character's right hand socket
+	CurrentWeapon->AttachToComponent(
+		GetMesh(),
+		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+		FName("hand_r")
+	);
 }
 
 

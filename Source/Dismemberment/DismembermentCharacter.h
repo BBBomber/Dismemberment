@@ -5,7 +5,9 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "WeaponActor.h"
 #include "DismembermentCharacter.generated.h"
+
 
 
 UCLASS(config=Game)
@@ -37,8 +39,23 @@ class ADismembermentCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	class UInputAction* LookAction;
 
+	/** Attack Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	class UInputAction* AttackAction;
+
 public:
 	ADismembermentCharacter();
+
+	//class of weapon to spawn
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TSubclassOf<AWeaponActor> WeaponClass;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	AWeaponActor* CurrentWeapon;
+
+	//sword swing anim
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	class UAnimMontage* AttackMontage;
 	
 
 protected:
@@ -48,6 +65,11 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
+	void Attack(const FInputActionValue& Value);
+
+	// spawn and attach to socket
+	void SpawnAndEquipWeapon();
 			
 
 protected:

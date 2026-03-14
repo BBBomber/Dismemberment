@@ -21,7 +21,7 @@ void AWeaponActor::EnableTrace()
 {
 	bTraceActive = true;
 
-	//so the first tick has valid last-frame data
+	//so the first tick has valid last frame data
 	LastFrameTipPosition = BladeStaticMesh->GetSocketLocation(FName("BladeTip"));
 	LastFrameBasePosition = BladeStaticMesh->GetSocketLocation(FName("BladeBase"));
 }
