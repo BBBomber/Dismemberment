@@ -6,12 +6,15 @@
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "WeaponActor.h"
+#include "Dismemberable.h"
+#include "DismembermentTypes.h"
+#include "SkeletalMeshDismembermentComp.h"
 #include "DismembermentCharacter.generated.h"
 
 
 
 UCLASS(config=Game)
-class ADismembermentCharacter : public ACharacter
+class ADismembermentCharacter : public ACharacter, public IDismemberable
 {
 	GENERATED_BODY()
 
@@ -43,6 +46,9 @@ class ADismembermentCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	class UInputAction* AttackAction;
 
+
+	FTimerHandle AttackEndTimer;
+
 public:
 	ADismembermentCharacter();
 
@@ -56,6 +62,17 @@ public:
 	//sword swing anim
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	class UAnimMontage* AttackMontage;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dismemberment")
+	USkeletalMeshDismembermentComp* DismembermentComp;
+
+
+	UPROPERTY(EditAnywhere, Category = "Weapon")
+		FVector WeaponLocationOffset;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon")
+		FRotator WeaponRotationOffset;
+
 	
 
 protected:
@@ -70,6 +87,8 @@ protected:
 
 	// spawn and attach to socket
 	void SpawnAndEquipWeapon();
+
+	void ReEnableMovement();
 			
 
 protected:
@@ -79,10 +98,15 @@ protected:
 	// To add mapping context
 	virtual void BeginPlay();
 
+
 public:
 	/** Returns CameraBoom subobject **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	// IDismemberable interface
+	virtual void ProcessHit_Implementation(const FDismembermentHitData& HitData) override;
+	virtual bool CanBeDismembered_Implementation() const override;
 };
 

@@ -99,7 +99,7 @@ void AWeaponActor::DispatchHit(const FHitResult& HitResult, const FVector& Blade
 		return;
 	}
 
-	if (!Dismemberable->CanBeDismembered())
+	if (!IDismemberable::Execute_CanBeDismembered(HitActor))
 	{
 		return;
 	}
@@ -109,5 +109,5 @@ void AWeaponActor::DispatchHit(const FHitResult& HitResult, const FVector& Blade
 	HitData.BladeDirection = BladeDirection;
 
 	// send data to hit actor :)
-	Dismemberable->ProcessHit(HitData);
+	IDismemberable::Execute_ProcessHit(HitActor, HitData);
 }

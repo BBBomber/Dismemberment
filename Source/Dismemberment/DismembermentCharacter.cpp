@@ -47,6 +47,8 @@ ADismembermentCharacter::ADismembermentCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
+	DismembermentComp = CreateDefaultSubobject<USkeletalMeshDismembermentComp>(TEXT("DismembermentComp"));
+
 	CurrentWeapon = nullptr;
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
@@ -70,6 +72,22 @@ void ADismembermentCharacter::BeginPlay()
 	SpawnAndEquipWeapon();
 }
 
+void ADismembermentCharacter::ProcessHit_Implementation(const FDismembermentHitData& HitData)
+{
+	if (DismembermentComp)
+	{
+		IDismemberable::Execute_ProcessHit(DismembermentComp, HitData);
+	}
+}
+
+bool ADismembermentCharacter::CanBeDismembered_Implementation() const
+{
+	if (DismembermentComp)
+	{
+		return IDismemberable::Execute_CanBeDismembered(DismembermentComp);
+	}
+	return false;
+}
 //////////////////////////////////////////////////////////////////////////
 // Input
 
@@ -138,32 +156,50 @@ void ADismembermentCharacter::Attack(const FInputActionValue& Value)
 		return;
 	}
 
-	PlayAnimMontage(AttackMontage);
+	GetCharacterMovement()->DisableMovement();
+
+	float MontageDuration = PlayAnimMontage(AttackMontage);
+
+	GetWorldTimerManager().SetTimer(AttackEndTimer, this, &ADismembermentCharacter::ReEnableMovement, MontageDuration, false);
+}
+
+void ADismembermentCharacter::ReEnableMovement()
+{
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 }
 
 void ADismembermentCharacter::SpawnAndEquipWeapon()
 {
 	if (!WeaponClass)
 	{
+		UE_LOG(LogTemp, Error, TEXT("WeaponClass is null"));
 		return;
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Spawning weapon"));
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 	SpawnParams.Instigator = GetInstigator();
 
 	CurrentWeapon = GetWorld()->SpawnActor<AWeaponActor>(WeaponClass, SpawnParams);
+
+	UE_LOG(LogTemp, Warning, TEXT("CurrentWeapon is %s"), CurrentWeapon ? TEXT("valid") : TEXT("null"));
+
 	if (!CurrentWeapon)
 	{
+		UE_LOG(LogTemp, Error, TEXT("SpawnActor failed"));
 		return;
 	}
 
-	// Attach to the character's right hand socket
 	CurrentWeapon->AttachToComponent(
 		GetMesh(),
 		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
 		FName("hand_r")
 	);
+
+	CurrentWeapon->SetActorRelativeLocation(WeaponLocationOffset);
+	CurrentWeapon->SetActorRelativeRotation(WeaponRotationOffset);
 }
 
 

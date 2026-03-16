@@ -5,6 +5,8 @@
 #include "Dismemberable.h"
 #include "DismembermentTypes.h"
 #include "ProceduralMeshComponent.h"
+#include "Containers/Array.h"
+#include "Math/Vector.h"
 #include "StaticMeshDismembermentComponent.generated.h"
 
 
@@ -32,7 +34,7 @@ public:
 	// implement interface
 	virtual void ProcessHit_Implementation(const FDismembermentHitData& HitData) override;
 	virtual bool CanBeDismembered_Implementation() const override;
-
+	void SetProceduralMesh(UProceduralMeshComponent* InMesh);
 private:
 
 	//null unitl first hit
@@ -41,6 +43,8 @@ private:
 
 	//true if static mesh has been converted
 	bool bIsProceduralMesh = false;
+
+	TArray<TArray<FVector>> CachedConvexVertices;
 
 	//conver static to procedural mesh
 	//hide original and copy geometry over
@@ -58,4 +62,5 @@ private:
 
 	//when depth is 0 and another hit is registered.
 	void FadeAndDestroy();
+	
 };
