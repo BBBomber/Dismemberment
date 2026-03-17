@@ -35,6 +35,7 @@ public:
 	virtual void ProcessHit_Implementation(const FDismembermentHitData& HitData) override;
 	virtual bool CanBeDismembered_Implementation() const override;
 	void SetProceduralMesh(UProceduralMeshComponent* InMesh);
+	void InitFromSlicedMesh(UProceduralMeshComponent* Mesh, int32 Depth, UMaterialInterface* InCapMaterial, int32 SwingID);
 private:
 
 	//null unitl first hit
@@ -46,6 +47,8 @@ private:
 
 	TArray<TArray<FVector>> CachedConvexVertices;
 
+	int32 LastHitSwingID = -1;
+
 	//conver static to procedural mesh
 	//hide original and copy geometry over
 	//call on first hit
@@ -54,11 +57,9 @@ private:
 	void ComputeSlicePlane(const FDismembermentHitData& HitData, FVector& OutPlaneNormal, FVector& OutPlanePosition) const;
 
 	
-	void ExecuteSlice(const FVector& PlanePosition, const FVector& PlaneNormal);
+	void ExecuteSlice(const FVector& PlanePosition, const FVector& PlaneNormal, int32 SwingID);
 
-	//takes the other sliced part and moves it into a new actor with the same comp
-	//start with depth-1
-	void SpawnSlicedPiece(UProceduralMeshComponent* OtherHalfMesh);
+
 
 	//when depth is 0 and another hit is registered.
 	void FadeAndDestroy();

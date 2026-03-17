@@ -7,21 +7,18 @@
 AWeaponActor::AWeaponActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
-
 	BladeStaticMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Blade"));
 	RootComponent = BladeStaticMesh;
 	BladeStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
 	bTraceActive = false;
+	CurrentSwingID = 0;
 	LastFrameTipPosition = FVector::ZeroVector;
 	LastFrameBasePosition = FVector::ZeroVector;
 }
-
 void AWeaponActor::EnableTrace()
 {
 	bTraceActive = true;
-
-	//so the first tick has valid last frame data
+	CurrentSwingID++;
 	LastFrameTipPosition = BladeStaticMesh->GetSocketLocation(FName("BladeTip"));
 	LastFrameBasePosition = BladeStaticMesh->GetSocketLocation(FName("BladeBase"));
 }
@@ -82,32 +79,36 @@ void AWeaponActor::PerformBladeTrace()
 	LastFrameBasePosition = CurrentBasePosition;
 }
 
+
 void AWeaponActor::DispatchHit(const FHitResult& HitResult, const FVector& BladeDirection)
 {
 	AActor* HitActor = HitResult.GetActor();
-	if (!HitActor)
+	if (!HitActor) return;
+
+	UObject* DismemberableTarget = nullptr;
+
+	if (Cast<IDismemberable>(HitActor))
 	{
-		//null check
-		return;
+		DismemberableTarget = HitActor;
+	}
+	else
+	{
+		for (UActorComponent* Comp : HitActor->GetComponents())
+		{
+			if (Cast<IDismemberable>(Comp))
+			{
+				DismemberableTarget = Comp;
+				break;
+			}
+		}
 	}
 
-	
-	IDismemberable* Dismemberable = Cast<IDismemberable>(HitActor);
-	if (!Dismemberable)
-	{
-		//does not own interface
-		return;
-	}
-
-	if (!IDismemberable::Execute_CanBeDismembered(HitActor))
-	{
-		return;
-	}
+	if (!DismemberableTarget) return;
 
 	FDismembermentHitData HitData;
 	HitData.HitResult = HitResult;
 	HitData.BladeDirection = BladeDirection;
+	HitData.SwingID = CurrentSwingID;
 
-	// send data to hit actor :)
-	IDismemberable::Execute_ProcessHit(HitActor, HitData);
+	IDismemberable::Execute_ProcessHit(DismemberableTarget, HitData);
 }

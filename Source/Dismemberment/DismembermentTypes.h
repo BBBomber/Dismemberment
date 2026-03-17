@@ -10,19 +10,20 @@
 USTRUCT(BlueprintType)
 struct DISMEMBERMENT_API FDismembermentHitData
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	
-	UPROPERTY(BlueprintReadWrite, Category = "Dismemberment")
-	FHitResult HitResult;
+        UPROPERTY(BlueprintReadWrite, Category = "Dismemberment")
+        FHitResult HitResult;
 
-	//dir at momement of contact used for slice plane
-	UPROPERTY(BlueprintReadWrite, Category = "Dismemberment")
-	FVector BladeDirection;
+    UPROPERTY(BlueprintReadWrite, Category = "Dismemberment")
+        FVector BladeDirection;
 
-	FDismembermentHitData()
-	{
-		BladeDirection = FVector::ZeroVector;
-		
-	}
+    UPROPERTY(BlueprintReadWrite, Category = "Dismemberment")
+        int32 SwingID = -1;
+
+    FDismembermentHitData()
+    {
+        BladeDirection = FVector::ZeroVector;
+        SwingID = -1;
+    }
 };

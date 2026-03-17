@@ -18,37 +18,32 @@ UStaticMeshDismembermentComponent::UStaticMeshDismembermentComponent()
 
 void UStaticMeshDismembermentComponent::ProcessHit_Implementation(const FDismembermentHitData& HitData)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ProcessHit called on %s"), *GetOwner()->GetName());
-	UE_LOG(LogTemp, Warning, TEXT("bIsProceduralMesh is %s"), bIsProceduralMesh ? TEXT("true") : TEXT("false"));
+    if (HitData.SwingID != -1 && HitData.SwingID == LastHitSwingID) return;
+    LastHitSwingID = HitData.SwingID;
 
-	if (!IDismemberable::Execute_CanBeDismembered(this))
-	{
-		FadeAndDestroy();
-		return;
-	}
+    if (!IDismemberable::Execute_CanBeDismembered(this))
+    {
+        FadeAndDestroy();
+        return;
+    }
 
-	if (!bIsProceduralMesh || !ProceduralMesh)
-	{
-		bIsProceduralMesh = false;
-		ProceduralMesh = nullptr;
-		ConvertToProceduralMesh();
-	}
+    if (!bIsProceduralMesh || !ProceduralMesh)
+    {
+        bIsProceduralMesh = false;
+        ProceduralMesh = nullptr;
+        ConvertToProceduralMesh();
+    }
 
-	if (!ProceduralMesh)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ProceduralMesh null after conversion"));
-		return;
-	}
+    if (!ProceduralMesh)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ProceduralMesh null after conversion"));
+        return;
+    }
 
-	UE_LOG(LogTemp, Warning, TEXT("Section count before slice: %d"), ProceduralMesh->GetNumSections());
-
-	FVector PlaneNormal;
-	FVector PlanePosition;
-	ComputeSlicePlane(HitData, PlaneNormal, PlanePosition);
-
-	UE_LOG(LogTemp, Warning, TEXT("Plane computed, calling ExecuteSlice"));
-
-	ExecuteSlice(PlanePosition, PlaneNormal);
+    FVector PlaneNormal;
+    FVector PlanePosition;
+    ComputeSlicePlane(HitData, PlaneNormal, PlanePosition);
+    ExecuteSlice(PlanePosition, PlaneNormal, HitData.SwingID);
 }
 
 bool UStaticMeshDismembermentComponent::CanBeDismembered_Implementation() const
@@ -133,21 +128,14 @@ void UStaticMeshDismembermentComponent::ComputeSlicePlane(const FDismembermentHi
 	}
 }
 
-void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePosition, const FVector& PlaneNormal)
+void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePosition, const FVector& PlaneNormal, int32 SwingID)
 {
-    UE_LOG(LogTemp, Warning, TEXT("ExecuteSlice started"));
     if (!ProceduralMesh) return;
 
-    // Perform the slice
     UProceduralMeshComponent* OtherHalfMesh = nullptr;
     UKismetProceduralMeshLibrary::SliceProceduralMesh(
-        ProceduralMesh,
-        PlanePosition,
-        PlaneNormal,
-        true,
-        OtherHalfMesh,
-        EProcMeshSliceCapOption::CreateNewSectionForCap,
-        CapMaterial
+        ProceduralMesh, PlanePosition, PlaneNormal, true,
+        OtherHalfMesh, EProcMeshSliceCapOption::CreateNewSectionForCap, CapMaterial
     );
 
     if (!OtherHalfMesh)
@@ -155,14 +143,9 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
         UE_LOG(LogTemp, Error, TEXT("SliceProceduralMesh failed"));
         return;
     }
-    UE_LOG(LogTemp, Warning, TEXT("Slice successful, OtherHalfMesh created"));
 
-    // Get material from original mesh
     UMaterialInterface* Mat = ProceduralMesh->GetMaterial(0);
 
-    // -----------------------------------------------------------------
-    // Helper lambda to gather all vertices from a procedural mesh
-    // -----------------------------------------------------------------
     auto GatherAllVertices = [](UProceduralMeshComponent* MeshComp) -> TArray<FVector>
     {
         TArray<FVector> AllVerts;
@@ -172,42 +155,32 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
             if (Section)
             {
                 for (const FProcMeshVertex& Vertex : Section->ProcVertexBuffer)
-                {
                     AllVerts.Add(Vertex.Position);
-                }
             }
         }
         return AllVerts;
     };
 
-    // -----------------------------------------------------------------
-    // 1. Create a new actor for the ORIGINAL half (ProceduralMesh)
-    // -----------------------------------------------------------------
+    // --- Original half ---
     FActorSpawnParameters SpawnParamsOrig;
     SpawnParamsOrig.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     SpawnParamsOrig.Name = MakeUniqueObjectName(GetWorld(), AActor::StaticClass(), FName("SlicedPiece_Original"));
     AActor* OrigActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParamsOrig);
     if (!OrigActor)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to spawn actor for original half"));
         OtherHalfMesh->DestroyComponent();
         return;
     }
-    UE_LOG(LogTemp, Warning, TEXT("Spawned original actor: %s"), *OrigActor->GetName());
 
-    // Create new mesh component
     UProceduralMeshComponent* OrigMesh = NewObject<UProceduralMeshComponent>(OrigActor, TEXT("OriginalHalfMesh"));
     OrigMesh->bUseComplexAsSimpleCollision = false;
     OrigMesh->SetMobility(EComponentMobility::Movable);
     OrigMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     OrigMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
     OrigActor->SetRootComponent(OrigMesh);
-
-    // Set transform
     OrigMesh->SetWorldTransform(ProceduralMesh->GetComponentTransform());
     OrigActor->SetActorScale3D(GetOwner()->GetActorScale3D());
 
-    // Copy sections from ProceduralMesh (the original half after slice)
     for (int32 i = 0; i < ProceduralMesh->GetNumSections(); i++)
     {
         FProcMeshSection* Section = ProceduralMesh->GetProcMeshSection(i);
@@ -219,56 +192,45 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
         }
     }
 
-    // -----------------------------------------------------------------
-    // Generate collision for original half from its own vertices
-    // -----------------------------------------------------------------
     TArray<FVector> OrigVerts = GatherAllVertices(OrigMesh);
     if (OrigVerts.Num() > 0)
     {
         OrigMesh->ClearCollisionConvexMeshes();
         OrigMesh->AddCollisionConvexMesh(OrigVerts);
-        UE_LOG(LogTemp, Warning, TEXT("Added convex hull to original half with %d vertices"), OrigVerts.Num());
     }
     OrigMesh->RecreatePhysicsState();
-
-    // Register component
     OrigMesh->RegisterComponent();
 
-    // Enable physics
+    UStaticMeshDismembermentComponent* OrigDismemberComp = NewObject<UStaticMeshDismembermentComponent>(OrigActor);
+    OrigDismemberComp->InitFromSlicedMesh(OrigMesh, SliceDepth - 1, CapMaterial, SwingID);
+    OrigDismemberComp->RegisterComponent();
+
     OrigMesh->SetSimulatePhysics(true);
-    OrigMesh->SetEnableGravity(true);
+    //OrigMesh->SetEnableGravity(true);
     OrigMesh->WakeRigidBody();
 
-    // -----------------------------------------------------------------
-    // 2. Create a new actor for the OTHER half (OtherHalfMesh)
-    // -----------------------------------------------------------------
+    // --- Other half ---
     FActorSpawnParameters SpawnParamsOther;
     SpawnParamsOther.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     SpawnParamsOther.Name = MakeUniqueObjectName(GetWorld(), AActor::StaticClass(), FName("SlicedPiece_Other"));
     AActor* OtherActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParamsOther);
     if (!OtherActor)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to spawn actor for other half"));
         OrigMesh->DestroyComponent();
         OrigActor->Destroy();
         OtherHalfMesh->DestroyComponent();
         return;
     }
-    UE_LOG(LogTemp, Warning, TEXT("Spawned other actor: %s"), *OtherActor->GetName());
 
-    // Create new mesh component
     UProceduralMeshComponent* OtherMesh = NewObject<UProceduralMeshComponent>(OtherActor, TEXT("OtherHalfMesh"));
     OtherMesh->bUseComplexAsSimpleCollision = false;
     OtherMesh->SetMobility(EComponentMobility::Movable);
     OtherMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     OtherMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
     OtherActor->SetRootComponent(OtherMesh);
-
-    // Set transform
     OtherMesh->SetWorldTransform(OtherHalfMesh->GetComponentTransform());
     OtherActor->SetActorScale3D(GetOwner()->GetActorScale3D());
 
-    // Copy sections from OtherHalfMesh
     for (int32 i = 0; i < OtherHalfMesh->GetNumSections(); i++)
     {
         FProcMeshSection* Section = OtherHalfMesh->GetProcMeshSection(i);
@@ -280,40 +242,32 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
         }
     }
 
-    // -----------------------------------------------------------------
-    // Generate collision for other half from its own vertices
-    // -----------------------------------------------------------------
     TArray<FVector> OtherVerts = GatherAllVertices(OtherMesh);
     if (OtherVerts.Num() > 0)
     {
         OtherMesh->ClearCollisionConvexMeshes();
         OtherMesh->AddCollisionConvexMesh(OtherVerts);
-        UE_LOG(LogTemp, Warning, TEXT("Added convex hull to other half with %d vertices"), OtherVerts.Num());
     }
     OtherMesh->RecreatePhysicsState();
-
-    // Register
     OtherMesh->RegisterComponent();
 
-    // Enable physics
+    UStaticMeshDismembermentComponent* OtherDismemberComp = NewObject<UStaticMeshDismembermentComponent>(OtherActor);
+    OtherDismemberComp->InitFromSlicedMesh(OtherMesh, SliceDepth - 1, CapMaterial, SwingID);
+    OtherDismemberComp->RegisterComponent();
+
     OtherMesh->SetSimulatePhysics(true);
-    OtherMesh->SetEnableGravity(true);
+    //OtherMesh->SetEnableGravity(true);
     OtherMesh->WakeRigidBody();
 
-    // -----------------------------------------------------------------
-    // 3. Cleanup
-    // -----------------------------------------------------------------
+    // --- Cleanup ---
     ProceduralMesh->DestroyComponent();
     OtherHalfMesh->DestroyComponent();
 
     AActor* OriginalOwner = GetOwner();
     if (OriginalOwner)
-    {
         OriginalOwner->Destroy();
-    }
 
     SliceDepth--;
-    UE_LOG(LogTemp, Warning, TEXT("ExecuteSlice finished, SliceDepth=%d"), SliceDepth);
 }
 void UStaticMeshDismembermentComponent::FadeAndDestroy()
 {
@@ -333,6 +287,14 @@ void UStaticMeshDismembermentComponent::SetProceduralMesh(UProceduralMeshCompone
 	bIsProceduralMesh = false;
 }
 
+void UStaticMeshDismembermentComponent::InitFromSlicedMesh(UProceduralMeshComponent* Mesh, int32 Depth, UMaterialInterface* InCapMaterial, int32 SwingID)
+{
+    ProceduralMesh = Mesh;
+    bIsProceduralMesh = true;
+    SliceDepth = Depth;
+    CapMaterial = InCapMaterial;
+    LastHitSwingID = SwingID;
+}
 
 
 

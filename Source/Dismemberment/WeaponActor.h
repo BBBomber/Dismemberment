@@ -37,19 +37,10 @@ public:
 	void TickTrace();
 
 private:
-
-
 	bool bTraceActive;
-
-	//end point of sweep trace during last frame
+	int32 CurrentSwingID;
 	FVector LastFrameTipPosition;
-
-	//start point of the sweep
 	FVector LastFrameBasePosition;
-
-	//multi line sweep from base to tip
-	//compares against last frame pos
 	void PerformBladeTrace();
-
 	void DispatchHit(const FHitResult& HitResult, const FVector& BladeDirection);
 };
