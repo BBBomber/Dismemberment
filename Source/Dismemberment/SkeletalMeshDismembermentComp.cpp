@@ -9,6 +9,7 @@
 #include "ProceduralMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Rendering/SkeletalMeshRenderData.h"
+#include "Kismet/GameplayStatics.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 
 USkeletalMeshDismembermentComp::USkeletalMeshDismembermentComp()
@@ -60,7 +61,9 @@ void USkeletalMeshDismembermentComp::ProcessHit_Implementation(const FDismemberm
     if (DetachedBones.Contains(SeveranceBone)) return;
 
     HideBoneChain(SkelMesh, SeveranceBone);
+
     SpawnDetachedChunk(SkelMesh, SeveranceBone);
+    SpawnCapDecal(SkelMesh, SeveranceBone);
     RagdollBody(SkelMesh);
 
     DetachedBones.Add(SeveranceBone);
@@ -162,7 +165,8 @@ void USkeletalMeshDismembermentComp::SpawnDetachedChunk(USkeletalMeshComponent* 
     AActor* ChunkActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
     if (!ChunkActor) return;
 
-    UProceduralMeshComponent* ProcMesh = BuildChunkProceduralMesh(SkelMesh, ChunkBoneIndices, ChunkActor);
+    FVector Center;
+    UProceduralMeshComponent* ProcMesh = BuildChunkProceduralMesh(SkelMesh, ChunkBoneIndices, ChunkActor, Center);
     if (!ProcMesh)
     {
         ChunkActor->Destroy();
@@ -171,13 +175,15 @@ void USkeletalMeshDismembermentComp::SpawnDetachedChunk(USkeletalMeshComponent* 
 
     ChunkActor->SetRootComponent(ProcMesh);
     ProcMesh->RegisterComponent();
+    ChunkActor->SetActorLocation(Center);
     ProcMesh->SetSimulatePhysics(true);
     ProcMesh->WakeRigidBody();
 }
 UProceduralMeshComponent* USkeletalMeshDismembermentComp::BuildChunkProceduralMesh(
     USkeletalMeshComponent* SkelMesh,
     const TSet<int32>& ChunkBoneIndices,
-    AActor* ChunkActor) const
+    AActor* ChunkActor,
+    FVector& OutCenter) const
 {
     USkeletalMesh* MeshAsset = SkelMesh->GetSkeletalMeshAsset();
     if (!MeshAsset) return nullptr;
@@ -275,6 +281,14 @@ UProceduralMeshComponent* USkeletalMeshDismembermentComp::BuildChunkProceduralMe
 
     if (Vertices.Num() == 0) return nullptr;
 
+    FBox Bounds(Vertices);
+    FVector Center = Bounds.GetCenter();
+    OutCenter = Center;
+
+    TArray<FVector> LocalVertices;
+    for (const FVector& V : Vertices)
+        LocalVertices.Add(V - Center);
+
     UProceduralMeshComponent* ProcMesh = NewObject<UProceduralMeshComponent>(ChunkActor, TEXT("ChunkProcMesh"));
     ProcMesh->bUseComplexAsSimpleCollision = false;
     ProcMesh->SetMobility(EComponentMobility::Movable);
@@ -283,18 +297,107 @@ UProceduralMeshComponent* USkeletalMeshDismembermentComp::BuildChunkProceduralMe
 
     TArray<FLinearColor> Colors;
     TArray<FProcMeshTangent> Tangents;
-    ProcMesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, Colors, Tangents, true);
+    ProcMesh->CreateMeshSection_LinearColor(0, LocalVertices, Triangles, Normals, UVs, Colors, Tangents, true);
     ProcMesh->SetMaterial(0, SkelMesh->GetMaterial(0));
 
-    ProcMesh->ClearCollisionConvexMeshes();
-    ProcMesh->AddCollisionConvexMesh(Vertices);
-    ProcMesh->RecreatePhysicsState();
+    // find boundary edges
+    TMap<TPair<int32, int32>, int32> EdgeCount;
+    for (int32 i = 0; i < Triangles.Num(); i += 3)
+    {
+        int32 A = Triangles[i], B = Triangles[i + 1], C = Triangles[i + 2];
+        auto AddEdge = [&](int32 V0, int32 V1)
+        {
+            TPair<int32, int32> Edge(FMath::Min(V0, V1), FMath::Max(V0, V1));
+            EdgeCount.FindOrAdd(Edge)++;
+        };
+        AddEdge(A, B);
+        AddEdge(B, C);
+        AddEdge(C, A);
+    }
 
-    ChunkActor->SetActorLocation(Vertices[0]);
+    TArray<TPair<int32, int32>> BoundaryEdges;
+    for (auto& Pair : EdgeCount)
+    {
+        if (Pair.Value == 1)
+            BoundaryEdges.Add(Pair.Key);
+    }
+    UE_LOG(LogTemp, Warning, TEXT("Boundary edges found: %d"), BoundaryEdges.Num());
+    
+
+    if (BoundaryEdges.Num() > 0)
+    {
+        TSet<TPair<int32, int32>> Remaining(BoundaryEdges);
+        TPair<int32, int32> Current = BoundaryEdges[0];
+        Remaining.Remove(Current);
+        TArray<int32> Loop;
+        Loop.Add(Current.Key);
+        Loop.Add(Current.Value);
+        int32 LastVert = Current.Value;
+
+        while (Remaining.Num() > 0)
+        {
+            bool bFound = false;
+            for (auto& Edge : Remaining)
+            {
+                if (Edge.Key == LastVert)
+                {
+                    Loop.Add(Edge.Value);
+                    LastVert = Edge.Value;
+                    Remaining.Remove(Edge);
+                    bFound = true;
+                    break;
+                }
+                else if (Edge.Value == LastVert)
+                {
+                    Loop.Add(Edge.Key);
+                    LastVert = Edge.Key;
+                    Remaining.Remove(Edge);
+                    bFound = true;
+                    break;
+                }
+            }
+            if (!bFound) break;
+        }
+        UE_LOG(LogTemp, Warning, TEXT("Loop size: %d"), Loop.Num());
+        UE_LOG(LogTemp, Warning, TEXT("Boundary edges found: %d"), BoundaryEdges.Num());
+        FVector Centroid = FVector::ZeroVector;
+        for (int32 Idx : Loop)
+            Centroid += LocalVertices[Idx];
+        Centroid /= Loop.Num();
+
+        TArray<FVector> CapVerts;
+        TArray<int32> CapTris;
+        TArray<FVector> CapNormals;
+        TArray<FVector2D> CapUVs;
+
+        CapVerts.Add(Centroid);
+        CapNormals.Add(FVector::UpVector);
+        CapUVs.Add(FVector2D(0.5f, 0.5f));
+
+        for (int32 i = 0; i < Loop.Num(); i++)
+        {
+            CapVerts.Add(LocalVertices[Loop[i]]);
+            CapNormals.Add(FVector::UpVector);
+            CapUVs.Add(FVector2D(0.f, 0.f));
+
+            int32 Next = (i + 1) % Loop.Num();
+            CapTris.Add(0);
+            CapTris.Add(Next + 1);
+            CapTris.Add(i + 1);
+        }
+
+        TArray<FLinearColor> CapColors;
+        TArray<FProcMeshTangent> CapTangents;
+        ProcMesh->CreateMeshSection_LinearColor(1, CapVerts, CapTris, CapNormals, CapUVs, CapColors, CapTangents, false);
+        ProcMesh->SetMaterial(1, SkelMesh->GetMaterial(0));
+    }
+
+    ProcMesh->ClearCollisionConvexMeshes();
+    ProcMesh->AddCollisionConvexMesh(LocalVertices);
+    ProcMesh->RecreatePhysicsState();
 
     return ProcMesh;
 }
-
 
 void USkeletalMeshDismembermentComp::RagdollBody(USkeletalMeshComponent* SkelMesh) const
 {
@@ -309,4 +412,27 @@ void USkeletalMeshDismembermentComp::RagdollBody(USkeletalMeshComponent* SkelMes
         Character->GetCharacterMovement()->DisableMovement();
         Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
+}
+
+void USkeletalMeshDismembermentComp::OnChunkDestroyed(AActor* DestroyedActor)
+{
+    UE_LOG(LogTemp, Error, TEXT("Chunk destroyed: %s"), *DestroyedActor->GetName());
+}
+
+void USkeletalMeshDismembermentComp::SpawnCapDecal(USkeletalMeshComponent* SkelMesh, FName SeveranceBone) const
+{
+    if (!CapDecalMaterial) return;
+
+    const FVector BoneLocation = SkelMesh->GetBoneLocation(SeveranceBone);
+    const FRotator BoneRotation = SkelMesh->GetBoneQuaternion(SeveranceBone).Rotator();
+    const FVector DecalSize = FVector(10.f, 15.f, 15.f);
+
+    UGameplayStatics::SpawnDecalAtLocation(
+        GetWorld(),
+        CapDecalMaterial,
+        DecalSize,
+        BoneLocation,
+        BoneRotation,
+        0.0f
+    );
 }

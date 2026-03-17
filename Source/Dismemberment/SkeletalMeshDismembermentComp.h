@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Dismemberable.h"
 #include "DismembermentTypes.h"
+#include "Materials/MaterialInterface.h"
 #include "SkeletalMeshDismembermentComp.generated.h"
 
 class UProceduralMeshComponent;
@@ -29,8 +30,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dismemberment")
         TArray<FSeverancePointData> SeverancePoints;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dismemberment")
+        UMaterialInterface* CapDecalMaterial = nullptr;
+
     virtual void ProcessHit_Implementation(const FDismembermentHitData& HitData) override;
     virtual bool CanBeDismembered_Implementation() const override;
+    UFUNCTION()
+        void OnChunkDestroyed(AActor* DestroyedActor);
 
 private:
 
@@ -42,6 +48,7 @@ private:
     void HideBoneChain(USkeletalMeshComponent* SkelMesh, FName RootBone) const;
     bool IsBoneChildOf(const FReferenceSkeleton& RefSkeleton, int32 BoneIndex, int32 AncestorIndex) const;
     void SpawnDetachedChunk(USkeletalMeshComponent* SkelMesh, FName SeveranceBone) const;
-    UProceduralMeshComponent* BuildChunkProceduralMesh(USkeletalMeshComponent* SkelMesh, const TSet<int32>& ChunkBoneIndices, AActor* ChunkActor) const;
+    UProceduralMeshComponent* BuildChunkProceduralMesh(USkeletalMeshComponent* SkelMesh, const TSet<int32>& ChunkBoneIndices, AActor* ChunkActor, FVector& OutCenter) const;
     void RagdollBody(USkeletalMeshComponent* SkelMesh) const;
+    void SpawnCapDecal(USkeletalMeshComponent* SkelMesh, FName SeveranceBone) const;
 };
