@@ -1,112 +1,68 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "WeaponActor.h"
-#include "Dismemberable.h"
-#include "DismembermentTypes.h"
-#include "SkeletalMeshDismembermentComp.h"
 #include "DismembermentCharacter.generated.h"
 
-
-
-UCLASS(config=Game)
-class ADismembermentCharacter : public ACharacter, public IDismemberable
+UCLASS(config = Game)
+class ADismembermentCharacter : public ACharacter
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	/** Camera boom positioning the camera behind the character */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	class USpringArmComponent* CameraBoom;
+        UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+        class USpringArmComponent* CameraBoom;
 
-	/** Follow camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	class UCameraComponent* FollowCamera;
-	
-	/** MappingContext */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputMappingContext* DefaultMappingContext;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+        class UCameraComponent* FollowCamera;
 
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputAction* JumpAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+        class UInputMappingContext* DefaultMappingContext;
 
-	/** Move Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputAction* MoveAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+        class UInputAction* JumpAction;
 
-	/** Look Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputAction* LookAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+        class UInputAction* MoveAction;
 
-	/** Attack Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputAction* AttackAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+        class UInputAction* LookAction;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+        class UInputAction* AttackAction;
 
-	FTimerHandle AttackEndTimer;
+    FTimerHandle AttackEndTimer;
 
 public:
-	ADismembermentCharacter();
+    ADismembermentCharacter();
 
-	//class of weapon to spawn
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
-	TSubclassOf<AWeaponActor> WeaponClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+        TSubclassOf<AWeaponActor> WeaponClass;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
-	AWeaponActor* CurrentWeapon;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+        AWeaponActor* CurrentWeapon;
 
-	//sword swing anim
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
-	class UAnimMontage* AttackMontage;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+        class UAnimMontage* AttackMontage;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dismemberment")
-	USkeletalMeshDismembermentComp* DismembermentComp;
+    UPROPERTY(EditAnywhere, Category = "Weapon")
+        FVector WeaponLocationOffset;
 
-
-	UPROPERTY(EditAnywhere, Category = "Weapon")
-		FVector WeaponLocationOffset;
-
-	UPROPERTY(EditAnywhere, Category = "Weapon")
-		FRotator WeaponRotationOffset;
-
-	
+    UPROPERTY(EditAnywhere, Category = "Weapon")
+        FRotator WeaponRotationOffset;
 
 protected:
+    void Move(const FInputActionValue& Value);
+    void Look(const FInputActionValue& Value);
+    void Attack(const FInputActionValue& Value);
+    void SpawnAndEquipWeapon();
+    void ReEnableMovement();
 
-	/** Called for movement input */
-	void Move(const FInputActionValue& Value);
-
-	/** Called for looking input */
-	void Look(const FInputActionValue& Value);
-
-	void Attack(const FInputActionValue& Value);
-
-	// spawn and attach to socket
-	void SpawnAndEquipWeapon();
-
-	void ReEnableMovement();
-			
-
-protected:
-	// APawn interface
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	
-	// To add mapping context
-	virtual void BeginPlay();
-
+    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+    virtual void BeginPlay() override;
 
 public:
-	/** Returns CameraBoom subobject **/
-	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
-	/** Returns FollowCamera subobject **/
-	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
-
-	// IDismemberable interface
-	virtual void ProcessHit_Implementation(const FDismembermentHitData& HitData) override;
-	virtual bool CanBeDismembered_Implementation() const override;
+    FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+    FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 };
-

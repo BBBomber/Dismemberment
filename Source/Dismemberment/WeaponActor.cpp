@@ -61,7 +61,7 @@ void AWeaponActor::PerformBladeTrace()
 		LastFrameBasePosition,
 		CurrentTipPosition,
 		FQuat::Identity,
-		ECC_Pawn,
+		ECC_PhysicsBody,
 		FCollisionShape::MakeCapsule(5.f, (CurrentTipPosition - CurrentBasePosition).Size() * 0.5f),
 		QueryParams
 	);
