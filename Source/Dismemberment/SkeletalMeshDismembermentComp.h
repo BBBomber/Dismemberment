@@ -6,6 +6,8 @@
 #include "DismembermentTypes.h"
 #include "SkeletalMeshDismembermentComp.generated.h"
 
+class UProceduralMeshComponent;
+
 USTRUCT(BlueprintType)
 struct FSeverancePointData
 {
@@ -21,6 +23,7 @@ class DISMEMBERMENT_API USkeletalMeshDismembermentComp : public UActorComponent,
     GENERATED_BODY()
 
 public:
+
     USkeletalMeshDismembermentComp();
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dismemberment")
@@ -30,6 +33,7 @@ public:
     virtual bool CanBeDismembered_Implementation() const override;
 
 private:
+
     TSet<FName> DetachedBones;
     int32 LastHitSwingID = -1;
 
@@ -38,6 +42,6 @@ private:
     void HideBoneChain(USkeletalMeshComponent* SkelMesh, FName RootBone) const;
     bool IsBoneChildOf(const FReferenceSkeleton& RefSkeleton, int32 BoneIndex, int32 AncestorIndex) const;
     void SpawnDetachedChunk(USkeletalMeshComponent* SkelMesh, FName SeveranceBone) const;
-    USkeletalMesh* BuildChunkSkeletalMesh(USkeletalMeshComponent* SkelMesh, FName SeveranceBone, const TArray<FName>& ChunkBoneNames) const;
+    UProceduralMeshComponent* BuildChunkProceduralMesh(USkeletalMeshComponent* SkelMesh, const TSet<int32>& ChunkBoneIndices, AActor* ChunkActor) const;
     void RagdollBody(USkeletalMeshComponent* SkelMesh) const;
 };

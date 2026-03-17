@@ -6,8 +6,10 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "SkeletalMergingLibrary.h"      
-#include "SkeletalMeshMerge.h"
+#include "ProceduralMeshComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
 
 USkeletalMeshDismembermentComp::USkeletalMeshDismembermentComp()
 {
@@ -147,12 +149,12 @@ void USkeletalMeshDismembermentComp::SpawnDetachedChunk(USkeletalMeshComponent* 
     const int32 SeveranceBoneIndex = RefSkeleton.FindBoneIndex(SeveranceBone);
     if (SeveranceBoneIndex == INDEX_NONE) return;
 
-    TArray<FName> ChunkBoneNames;
-    ChunkBoneNames.Add(SeveranceBone);
+    TSet<int32> ChunkBoneIndices;
+    ChunkBoneIndices.Add(SeveranceBoneIndex);
     for (int32 i = 0; i < RefSkeleton.GetNum(); i++)
     {
         if (IsBoneChildOf(RefSkeleton, i, SeveranceBoneIndex))
-            ChunkBoneNames.Add(RefSkeleton.GetBoneName(i));
+            ChunkBoneIndices.Add(i);
     }
 
     FActorSpawnParameters SpawnParams;
@@ -160,51 +162,139 @@ void USkeletalMeshDismembermentComp::SpawnDetachedChunk(USkeletalMeshComponent* 
     AActor* ChunkActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
     if (!ChunkActor) return;
 
-    USkeletalMeshComponent* ChunkSkelComp = NewObject<USkeletalMeshComponent>(ChunkActor, TEXT("ChunkMesh"));
-    ChunkSkelComp->SetSkeletalMesh(MeshAsset);
-    ChunkSkelComp->SetPhysicsAsset(SkelMesh->GetPhysicsAsset());
-    ChunkActor->SetRootComponent(ChunkSkelComp);
-    ChunkSkelComp->SetCollisionProfileName(TEXT("Ragdoll"));
-    ChunkSkelComp->RegisterComponent();
-    ChunkSkelComp->SetWorldTransform(SkelMesh->GetComponentTransform());
-
-    for (int32 i = 0; i < RefSkeleton.GetNum(); i++)
+    UProceduralMeshComponent* ProcMesh = BuildChunkProceduralMesh(SkelMesh, ChunkBoneIndices, ChunkActor);
+    if (!ProcMesh)
     {
-        FName BoneName = RefSkeleton.GetBoneName(i);
-        if (!ChunkBoneNames.Contains(BoneName))
-            ChunkSkelComp->HideBoneByName(BoneName, EPhysBodyOp::PBO_None);
+        ChunkActor->Destroy();
+        return;
     }
-    ChunkSkelComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-    ChunkSkelComp->RecreatePhysicsState();
-    ChunkSkelComp->SetAllBodiesSimulatePhysics(true);
-    ChunkSkelComp->SetSimulatePhysics(true);
-    ChunkSkelComp->WakeAllRigidBodies();
+
+    ChunkActor->SetRootComponent(ProcMesh);
+    ProcMesh->RegisterComponent();
+    ProcMesh->SetSimulatePhysics(true);
+    ProcMesh->WakeRigidBody();
 }
-USkeletalMesh* USkeletalMeshDismembermentComp::BuildChunkSkeletalMesh(
+UProceduralMeshComponent* USkeletalMeshDismembermentComp::BuildChunkProceduralMesh(
     USkeletalMeshComponent* SkelMesh,
-    FName SeveranceBone,
-    const TArray<FName>& ChunkBoneNames) const
+    const TSet<int32>& ChunkBoneIndices,
+    AActor* ChunkActor) const
 {
-    USkeletalMesh* SourceMesh = SkelMesh->GetSkeletalMeshAsset();
-    if (!SourceMesh) return nullptr;
+    USkeletalMesh* MeshAsset = SkelMesh->GetSkeletalMeshAsset();
+    if (!MeshAsset) return nullptr;
 
-    USkeletalMesh* MergedMesh = NewObject<USkeletalMesh>(GetTransientPackage(), NAME_None, RF_Transient);
-    if (!MergedMesh) return nullptr;
+    FSkeletalMeshRenderData* RenderData = MeshAsset->GetResourceForRendering();
+    if (!RenderData || RenderData->LODRenderData.Num() == 0) return nullptr;
 
-    TArray<USkeletalMesh*> MeshList;
-    MeshList.Add(SourceMesh);
+    const FSkeletalMeshLODRenderData& LODData = RenderData->LODRenderData[0];
+    const FSkinWeightVertexBuffer* SkinWeightBuffer = LODData.GetSkinWeightVertexBuffer();
+    if (!SkinWeightBuffer) return nullptr;
 
-    TArray<FSkelMeshMergeSectionMapping> SectionMappings;
+    TArray<uint32> IndexBuffer;
+    LODData.MultiSizeIndexContainer.GetIndexBuffer(IndexBuffer);
 
-    FSkeletalMeshMerge Merger(MergedMesh, MeshList, SectionMappings, 0);
-    if (!Merger.DoMerge())
+    const FStaticMeshVertexBuffer& StaticVertBuffer = LODData.StaticVertexBuffers.StaticMeshVertexBuffer;
+
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
+    TArray<FVector> Normals;
+    TArray<FVector2D> UVs;
+    TMap<uint32, int32> VertexRemap;
+
+    for (int32 SectionIdx = 0; SectionIdx < LODData.RenderSections.Num(); SectionIdx++)
     {
-        UE_LOG(LogTemp, Error, TEXT("FSkeletalMeshMerge failed for chunk %s"), *SeveranceBone.ToString());
-        return nullptr;
+        const FSkelMeshRenderSection& Section = LODData.RenderSections[SectionIdx];
+
+        for (uint32 TriIdx = 0; TriIdx < Section.NumTriangles; TriIdx++)
+        {
+            uint32 BaseIdx = Section.BaseIndex + TriIdx * 3;
+            uint32 Idx[3] = {
+                IndexBuffer[BaseIdx],
+                IndexBuffer[BaseIdx + 1],
+                IndexBuffer[BaseIdx + 2]
+            };
+
+            bool bAllChunk = true;
+            for (int32 i = 0; i < 3; i++)
+            {
+                int32 MaxWeight = -1;
+                int32 DominantLocalBone = 0;
+                for (int32 Inf = 0; Inf < (int32)SkinWeightBuffer->GetMaxBoneInfluences(); Inf++)
+                {
+                    int32 Weight = SkinWeightBuffer->GetBoneWeight(Idx[i], Inf);
+                    if (Weight > MaxWeight)
+                    {
+                        MaxWeight = Weight;
+                        DominantLocalBone = SkinWeightBuffer->GetBoneIndex(Idx[i], Inf);
+                    }
+                }
+
+                int32 GlobalBoneIdx = (DominantLocalBone < Section.BoneMap.Num()) ?
+                    Section.BoneMap[DominantLocalBone] : 0;
+
+                if (!ChunkBoneIndices.Contains(GlobalBoneIdx))
+                {
+                    bAllChunk = false;
+                    break;
+                }
+            }
+
+            if (!bAllChunk) continue;
+
+            int32 LocalIdx[3];
+            for (int32 i = 0; i < 3; i++)
+            {
+                if (int32* Existing = VertexRemap.Find(Idx[i]))
+                {
+                    LocalIdx[i] = *Existing;
+                }
+                else
+                {
+                    FVector PosLocal = FVector(USkeletalMeshComponent::GetSkinnedVertexPosition(
+                        SkelMesh, Idx[i], LODData,
+                        *const_cast<FSkinWeightVertexBuffer*>(SkinWeightBuffer)
+                    ));
+                    FVector PosWorld = SkelMesh->GetComponentTransform().TransformPosition(PosLocal);
+                    FVector Normal = FVector(StaticVertBuffer.VertexTangentZ(Idx[i]));
+                    Normal = SkelMesh->GetComponentTransform().TransformVectorNoScale(Normal);
+                    FVector2D UV = FVector2D(StaticVertBuffer.GetVertexUV(Idx[i], 0));
+
+                    int32 NewIdx = Vertices.Num();
+                    Vertices.Add(PosWorld);
+                    Normals.Add(Normal);
+                    UVs.Add(UV);
+                    VertexRemap.Add(Idx[i], NewIdx);
+                    LocalIdx[i] = NewIdx;
+                }
+            }
+
+            Triangles.Add(LocalIdx[0]);
+            Triangles.Add(LocalIdx[1]);
+            Triangles.Add(LocalIdx[2]);
+        }
     }
 
-    return MergedMesh;
+    if (Vertices.Num() == 0) return nullptr;
+
+    UProceduralMeshComponent* ProcMesh = NewObject<UProceduralMeshComponent>(ChunkActor, TEXT("ChunkProcMesh"));
+    ProcMesh->bUseComplexAsSimpleCollision = false;
+    ProcMesh->SetMobility(EComponentMobility::Movable);
+    ProcMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    ProcMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+
+    TArray<FLinearColor> Colors;
+    TArray<FProcMeshTangent> Tangents;
+    ProcMesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, Colors, Tangents, true);
+    ProcMesh->SetMaterial(0, SkelMesh->GetMaterial(0));
+
+    ProcMesh->ClearCollisionConvexMeshes();
+    ProcMesh->AddCollisionConvexMesh(Vertices);
+    ProcMesh->RecreatePhysicsState();
+
+    ChunkActor->SetActorLocation(Vertices[0]);
+
+    return ProcMesh;
 }
+
 
 void USkeletalMeshDismembermentComp::RagdollBody(USkeletalMeshComponent* SkelMesh) const
 {
@@ -215,5 +305,8 @@ void USkeletalMeshDismembermentComp::RagdollBody(USkeletalMeshComponent* SkelMes
 
     ACharacter* Character = Cast<ACharacter>(GetOwner());
     if (Character)
+    {
         Character->GetCharacterMovement()->DisableMovement();
+        Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
 }
