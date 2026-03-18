@@ -11,9 +11,9 @@ During the players swing animation, the weaapon(has base and tip socket) runs a 
 
 When it hits an object implementing the IDismemberable interface, it gets the cut plan using the cross product of the base to tip dir and the tip delta dir. The weapon passes this onto the static/skeleton dismemberment comp.
 
-If it hit a static mesh — the mesh gets split along that plane into two pieces that fall apart and can be cut again until slice depth on the new actors hit 0. (configurable in bp)
+If it hit a static mesh, the mesh gets split along that plane into two pieces that fall apart and can be cut again until slice depth on the new actors hit 0. (configurable in bp)
 
-If it hit a skeletal mesh — it finds the nearest bone, walks up to the nearest valid cut point, hides that part of the body, builds a matching chunk from the mesh data and spawns it as a separate flying piece, then drops the body into ragdoll. Blood spawns at the cut point. The ragdoll can continued to be cut up until it has no severable bones left. Currently this does not support a cap mesh on the spawned limb chunk. 
+If it hit a skeletal mesh, it finds the nearest bone, walks up to the nearest valid cut point, hides that part of the body, builds a matching chunk from the mesh data and spawns it as a separate flying piece, then drops the body into ragdoll. Blood spawns at the cut point. The ragdoll can continued to be cut up until it has no severable bones left. Currently this does not support a cap mesh on the spawned limb chunk. 
 
 
 ## How to Test
