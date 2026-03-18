@@ -8,7 +8,7 @@
 #include "ANS_WeaponTrace.generated.h"
 
 /**
- * 
+ * Gets current weapon and runs the trace on attack on the weapon, therefore no need for tick on weapon.
  */
 UCLASS()
 class DISMEMBERMENT_API UANS_WeaponTrace : public UAnimNotifyState

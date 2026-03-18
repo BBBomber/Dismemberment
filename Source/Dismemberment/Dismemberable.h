@@ -30,6 +30,8 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Dismemberment")
 	void ProcessHit(const FDismembermentHitData& HitData);
 
+
+	//false when depth limit is reached for static or if all bones have been removed.
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Dismemberment")
 	bool CanBeDismembered() const;
 };

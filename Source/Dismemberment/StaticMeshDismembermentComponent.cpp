@@ -1,24 +1,18 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "StaticMeshDismembermentComponent.h"
 #include "DismembermentTypes.h"
 #include "Components/StaticMeshComponent.h"
 #include "KismetProceduralMeshLibrary.h"
-#include "StaticMeshDismembermentComponent.h"
 
-// Sets default values for this component's properties
 UStaticMeshDismembermentComponent::UStaticMeshDismembermentComponent()
 {
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
-	PrimaryComponentTick.bCanEverTick = false;
-
-
+    PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UStaticMeshDismembermentComponent::ProcessHit_Implementation(const FDismembermentHitData& HitData)
 {
-    if (HitData.SwingID != -1 && HitData.SwingID == LastHitSwingID) return;
+    if (HitData.SwingID != -1 && HitData.SwingID == LastHitSwingID)
+        return;
+
     LastHitSwingID = HitData.SwingID;
 
     if (!IDismemberable::Execute_CanBeDismembered(this))
@@ -35,10 +29,7 @@ void UStaticMeshDismembermentComponent::ProcessHit_Implementation(const FDismemb
     }
 
     if (!ProceduralMesh)
-    {
-        UE_LOG(LogTemp, Error, TEXT("ProceduralMesh null after conversion"));
         return;
-    }
 
     FVector PlaneNormal;
     FVector PlanePosition;
@@ -48,29 +39,24 @@ void UStaticMeshDismembermentComponent::ProcessHit_Implementation(const FDismemb
 
 bool UStaticMeshDismembermentComponent::CanBeDismembered_Implementation() const
 {
-	return SliceDepth > 0;
+    return SliceDepth > 0;
 }
 
 void UStaticMeshDismembermentComponent::ConvertToProceduralMesh()
 {
     AActor* Owner = GetOwner();
-    if (!Owner) return;
+    if (!Owner)
+        return;
 
     UStaticMeshComponent* StaticMeshComp = Owner->FindComponentByClass<UStaticMeshComponent>();
     if (!StaticMeshComp)
-    {
-        UE_LOG(LogTemp, Error, TEXT("No StaticMeshComponent found on %s"), *Owner->GetName());
         return;
-    }
 
     if (!ProceduralMesh)
     {
         ProceduralMesh = Owner->FindComponentByClass<UProceduralMeshComponent>();
         if (!ProceduralMesh)
-        {
-            UE_LOG(LogTemp, Error, TEXT("No ProceduralMeshComponent found on %s"), *Owner->GetName());
             return;
-        }
     }
 
     ProceduralMesh->SetWorldTransform(StaticMeshComp->GetComponentTransform());
@@ -82,55 +68,43 @@ void UStaticMeshDismembermentComponent::ConvertToProceduralMesh()
         false
     );
 
-    // ========== CACHE CONVEX HULLS ==========
     CachedConvexVertices.Empty();
     if (UStaticMesh* SourceMesh = StaticMeshComp->GetStaticMesh())
     {
         if (UBodySetup* BodySetup = SourceMesh->GetBodySetup())
         {
             for (const FKConvexElem& ConvexElem : BodySetup->AggGeom.ConvexElems)
-            {
                 CachedConvexVertices.Add(ConvexElem.VertexData);
-                UE_LOG(LogTemp, Warning, TEXT("Cached convex hull with %d vertices"), ConvexElem.VertexData.Num());
-            }
         }
     }
-    // ========================================
 
-    UE_LOG(LogTemp, Warning, TEXT("Sections after copy: %d"), ProceduralMesh->GetNumSections());
-
-    // Set procedural mesh as new root before destroying static mesh
     ProceduralMesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
     Owner->SetRootComponent(ProceduralMesh);
 
-    // Destroy the static mesh entirely
     StaticMeshComp->SetHiddenInGame(true);
     StaticMeshComp->SetVisibility(false);
     StaticMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     StaticMeshComp->DestroyComponent();
 
-    // Set collision on procedural mesh (will be replaced by convex hulls later)
     ProceduralMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     ProceduralMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
 
-    UE_LOG(LogTemp, Warning, TEXT("ProceduralMesh visibility: %s"), ProceduralMesh->IsVisible() ? TEXT("true") : TEXT("false"));
-    UE_LOG(LogTemp, Warning, TEXT("ProceduralMesh location: %s"), *ProceduralMesh->GetComponentLocation().ToString());
-
     bIsProceduralMesh = true;
 }
+
 void UStaticMeshDismembermentComponent::ComputeSlicePlane(const FDismembermentHitData& HitData, FVector& OutPlaneNormal, FVector& OutPlanePosition) const
 {
-	OutPlanePosition = HitData.HitResult.ImpactPoint; //where the weapon first touches
-	OutPlaneNormal = FVector::CrossProduct(HitData.BladeDirection, HitData.HitResult.ImpactNormal).GetSafeNormal();
+    OutPlanePosition = HitData.HitResult.ImpactPoint;
+    OutPlaneNormal = FVector::CrossProduct(HitData.BladeDirection, HitData.HitResult.ImpactNormal).GetSafeNormal();
 
-	if (OutPlaneNormal.IsNearlyZero()) {
-		OutPlaneNormal = HitData.HitResult.ImpactNormal;
-	}
+    if (OutPlaneNormal.IsNearlyZero())
+        OutPlaneNormal = HitData.HitResult.ImpactNormal;
 }
 
 void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePosition, const FVector& PlaneNormal, int32 SwingID)
 {
-    if (!ProceduralMesh) return;
+    if (!ProceduralMesh)
+        return;
 
     UProceduralMeshComponent* OtherHalfMesh = nullptr;
     UKismetProceduralMeshLibrary::SliceProceduralMesh(
@@ -139,10 +113,7 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
     );
 
     if (!OtherHalfMesh)
-    {
-        UE_LOG(LogTemp, Error, TEXT("SliceProceduralMesh failed"));
         return;
-    }
 
     UMaterialInterface* Mat = ProceduralMesh->GetMaterial(0);
 
@@ -161,7 +132,6 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
         return AllVerts;
     };
 
-    // --- Original half ---
     FActorSpawnParameters SpawnParamsOrig;
     SpawnParamsOrig.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     SpawnParamsOrig.Name = MakeUniqueObjectName(GetWorld(), AActor::StaticClass(), FName("SlicedPiece_Original"));
@@ -206,10 +176,8 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
     OrigDismemberComp->RegisterComponent();
 
     OrigMesh->SetSimulatePhysics(true);
-    //OrigMesh->SetEnableGravity(true);
     OrigMesh->WakeRigidBody();
 
-    // --- Other half ---
     FActorSpawnParameters SpawnParamsOther;
     SpawnParamsOther.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     SpawnParamsOther.Name = MakeUniqueObjectName(GetWorld(), AActor::StaticClass(), FName("SlicedPiece_Other"));
@@ -256,10 +224,8 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
     OtherDismemberComp->RegisterComponent();
 
     OtherMesh->SetSimulatePhysics(true);
-    //OtherMesh->SetEnableGravity(true);
     OtherMesh->WakeRigidBody();
 
-    // --- Cleanup ---
     ProceduralMesh->DestroyComponent();
     OtherHalfMesh->DestroyComponent();
 
@@ -269,22 +235,18 @@ void UStaticMeshDismembermentComponent::ExecuteSlice(const FVector& PlanePositio
 
     SliceDepth--;
 }
+
 void UStaticMeshDismembermentComponent::FadeAndDestroy()
 {
-	AActor* Owner = GetOwner();
-	if (!Owner)
-	{
-		return;
-	}
-
-	//no fade for now 
-	Owner->Destroy();
+    AActor* Owner = GetOwner();
+    if (Owner)
+        Owner->Destroy();
 }
 
 void UStaticMeshDismembermentComponent::SetProceduralMesh(UProceduralMeshComponent* InMesh)
 {
-	ProceduralMesh = InMesh;
-	bIsProceduralMesh = false;
+    ProceduralMesh = InMesh;
+    bIsProceduralMesh = false;
 }
 
 void UStaticMeshDismembermentComponent::InitFromSlicedMesh(UProceduralMeshComponent* Mesh, int32 Depth, UMaterialInterface* InCapMaterial, int32 SwingID)
@@ -295,8 +257,3 @@ void UStaticMeshDismembermentComponent::InitFromSlicedMesh(UProceduralMeshCompon
     CapMaterial = InCapMaterial;
     LastHitSwingID = SwingID;
 }
-
-
-
-
-

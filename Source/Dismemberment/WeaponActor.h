@@ -7,7 +7,7 @@
 
 
 //Sword that does per frame sweep only during the animation
-//Attaches to chars hand socket
+//Spawned by char at start
 
 //Tracks socket pos per frame for vel calcs
 //performs trace
@@ -41,6 +41,13 @@ private:
 	int32 CurrentSwingID;
 	FVector LastFrameTipPosition;
 	FVector LastFrameBasePosition;
+
+	//reads tip and base socket pos
+	//blade dir is the delta bw tip socket pos last frame and this frame. 
+	//runs a sweep using the full len of the blade using the tow sockets
+	//calls dispatch hit
 	void PerformBladeTrace();
+
+	//check for the IDismemberable interface and calls
 	void DispatchHit(const FHitResult& HitResult, const FVector& BladeDirection);
 };
