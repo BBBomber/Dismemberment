@@ -16,6 +16,9 @@ struct FSeverancePointData
 
         UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dismemberment")
         FName BoneName;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dismemberment")
+        FName RemapToSeveranceBone = NAME_None;
 };
 
 UCLASS(ClassGroup = (Dismemberment), meta = (BlueprintSpawnableComponent))

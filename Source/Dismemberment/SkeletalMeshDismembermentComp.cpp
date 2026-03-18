@@ -16,56 +16,80 @@ USkeletalMeshDismembermentComp::USkeletalMeshDismembermentComp()
 {
     PrimaryComponentTick.bCanEverTick = false;
 
-    TArray<FName> DefaultBones = {
-        FName("neck_01"),
-        FName("upperarm_l"),
-        FName("upperarm_r"),
-        FName("lowerarm_l"),
-        FName("lowerarm_r"),
-        FName("hand_l"),
-        FName("hand_r"),
-        FName("thigh_l"),
-        FName("thigh_r"),
-        FName("calf_l"),
-        FName("calf_r"),
-        FName("foot_l"),
-        FName("foot_r")
+    TArray<FSeverancePointData> Defaults = {
+       { FName("pelvis"),      FName("spine_01") },
+       { FName("spine_01"),    NAME_None },
+       { FName("spine_02"),    NAME_None },
+       { FName("spine_03"),    NAME_None },
+       { FName("neck_01"),     NAME_None },
+       { FName("upperarm_l"),  NAME_None },
+       { FName("upperarm_r"),  NAME_None },
+       { FName("lowerarm_l"),  NAME_None },
+       { FName("lowerarm_r"),  NAME_None },
+       { FName("hand_l"),      NAME_None },
+       { FName("hand_r"),      NAME_None },
+       { FName("thigh_l"),     NAME_None },
+       { FName("thigh_r"),     NAME_None },
+       { FName("calf_l"),      NAME_None },
+       { FName("calf_r"),      NAME_None },
+       { FName("foot_l"),      NAME_None },
+       { FName("foot_r"),      NAME_None },
     };
 
-    for (const FName& BoneName : DefaultBones)
-    {
-        FSeverancePointData Point;
-        Point.BoneName = BoneName;
-        SeverancePoints.Add(Point);
-    }
+  SeverancePoints = Defaults;
 }
-
 void USkeletalMeshDismembermentComp::ProcessHit_Implementation(const FDismembermentHitData& HitData)
 {
-    if (HitData.SwingID != -1 && HitData.SwingID == LastHitSwingID) return;
+    if (HitData.SwingID != -1 && HitData.SwingID == LastHitSwingID)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: duplicate SwingID %d, skipping"), HitData.SwingID);
+        return;
+    }
     LastHitSwingID = HitData.SwingID;
 
-    if (!CanBeDismembered_Implementation()) return;
+    if (!CanBeDismembered_Implementation())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: CanBeDismembered returned false"));
+        return;
+    }
 
     AActor* Owner = GetOwner();
-    if (!Owner) return;
+    if (!Owner)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: no owner"));
+        return;
+    }
 
     USkeletalMeshComponent* SkelMesh = Owner->FindComponentByClass<USkeletalMeshComponent>();
-    if (!SkelMesh) return;
+    if (!SkelMesh)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: no SkeletalMeshComponent on %s"), *Owner->GetName());
+        return;
+    }
 
     FName HitBone = FindNearestBoneToPoint(SkelMesh, HitData.HitResult.ImpactPoint);
+    UE_LOG(LogTemp, Warning, TEXT("ProcessHit: ImpactPoint %s, nearest bone: %s"), *HitData.HitResult.ImpactPoint.ToString(), *HitBone.ToString());
     if (HitBone == NAME_None) return;
 
     FName SeveranceBone = FindNearestSeverancePoint(SkelMesh, HitBone);
-    if (SeveranceBone == NAME_None) return;
-    if (DetachedBones.Contains(SeveranceBone)) return;
+    UE_LOG(LogTemp, Warning, TEXT("ProcessHit: severance bone: %s"), *SeveranceBone.ToString());
+    if (SeveranceBone == NAME_None)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: no severance point found in chain from %s"), *HitBone.ToString());
+        return;
+    }
 
+    if (DetachedBones.Contains(SeveranceBone))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ProcessHit: %s already detached"), *SeveranceBone.ToString());
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("ProcessHit: dismembering %s"), *SeveranceBone.ToString());
     HideBoneChain(SkelMesh, SeveranceBone);
-
     SpawnDetachedChunk(SkelMesh, SeveranceBone);
     SpawnCapDecal(SkelMesh, SeveranceBone);
     RagdollBody(SkelMesh);
-
     DetachedBones.Add(SeveranceBone);
 }
 
@@ -82,7 +106,11 @@ FName USkeletalMeshDismembermentComp::FindNearestSeverancePoint(USkeletalMeshCom
         for (const FSeverancePointData& Point : SeverancePoints)
         {
             if (Point.BoneName == CurrentBone)
+            {
+                if (Point.RemapToSeveranceBone != NAME_None)
+                    return Point.RemapToSeveranceBone;
                 return CurrentBone;
+            }
         }
         CurrentBone = SkelMesh->GetParentBone(CurrentBone);
     }

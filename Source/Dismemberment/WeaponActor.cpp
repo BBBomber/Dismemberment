@@ -71,6 +71,7 @@ void AWeaponActor::PerformBladeTrace()
 
 	for (const FHitResult& Hit : HitResults)
 	{
+		
 		DispatchHit(Hit, BladeDirection);
 	}
 
@@ -109,6 +110,7 @@ void AWeaponActor::DispatchHit(const FHitResult& HitResult, const FVector& Blade
 	HitData.HitResult = HitResult;
 	HitData.BladeDirection = BladeDirection;
 	HitData.SwingID = CurrentSwingID;
-
+	UE_LOG(LogTemp, Warning, TEXT("DispatchHit: calling ProcessHit on %s (target: %s)"), *HitActor->GetName(), *DismemberableTarget->GetName());
 	IDismemberable::Execute_ProcessHit(DismemberableTarget, HitData);
+
 }
