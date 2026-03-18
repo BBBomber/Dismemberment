@@ -29,10 +29,10 @@ If it hit a skeletal mesh, it finds the nearest bone, walks up to the nearest va
 
 ## Current Limitations and Failures
 
-**Skeletal mesh — no cap geometry.**
+**Skeletal mesh, no cap geometry.**
 The severed cross-section is open. The chunk mesh has a hole where it was cut from the body. Generating a correct cap requires proper polygon triangulation of the boundary loop. Or a way to make the boundary loop flat.
 
-**Static mesh — convex collision only.**
+**Static mesh, convex collision only.**
 Sliced pieces get a single convex hull from all their vertices. Concave pieces get an incorrect hull, causing floating or inaccurate collision.
 Requires more testing to improve.
 
