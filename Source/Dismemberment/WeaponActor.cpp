@@ -41,7 +41,9 @@ void AWeaponActor::PerformBladeTrace()
 {
     const FVector CurrentTipPosition = BladeStaticMesh->GetSocketLocation(FName("BladeTip"));
     const FVector CurrentBasePosition = BladeStaticMesh->GetSocketLocation(FName("BladeBase"));
-    const FVector BladeDirection = (CurrentTipPosition - LastFrameTipPosition).GetSafeNormal();
+    const FVector BaseToTip = (CurrentTipPosition - CurrentBasePosition).GetSafeNormal();
+    const FVector TipDelta = (CurrentTipPosition - LastFrameTipPosition).GetSafeNormal();
+    const FVector BladePlane = FVector::CrossProduct(BaseToTip, TipDelta).GetSafeNormal();
 
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(this);
@@ -55,19 +57,18 @@ void AWeaponActor::PerformBladeTrace()
         CurrentTipPosition,
         FQuat::Identity,
         ECC_PhysicsBody,
-        FCollisionShape::MakeCapsule(5.f, (CurrentTipPosition - CurrentBasePosition).Size() * 0.5f),
+        FCollisionShape::MakeCapsule(5.f, (CurrentTipPosition - CurrentBasePosition).Size() * 0.1f),
         QueryParams
     );
 
     DrawDebugLine(GetWorld(), LastFrameBasePosition, CurrentTipPosition, FColor::Red, false, 0.1f);
 
     for (const FHitResult& Hit : HitResults)
-        DispatchHit(Hit, BladeDirection);
+        DispatchHit(Hit, BladePlane);
 
     LastFrameTipPosition = CurrentTipPosition;
     LastFrameBasePosition = CurrentBasePosition;
 }
-
 void AWeaponActor::DispatchHit(const FHitResult& HitResult, const FVector& BladeDirection)
 {
     AActor* HitActor = HitResult.GetActor();

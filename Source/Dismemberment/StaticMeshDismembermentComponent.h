@@ -56,13 +56,12 @@ private:
 	//conver static to procedural mesh
 	//hide original and copy geometry over, procedural mesh comp needs to be on the actor from start
 	// copies geometry using the kismet procedural mesh lib
-	// caches convex hulls from the static mesh body setup (cocave meshes will cause issues atm, the simplified coll shape will be too big)
+	// caches convex hulls from the static mesh body setup 
 	//call on first hit
 	void ConvertToProceduralMesh();
 
 
-	//gets the impact normal from hit data
-	//normal is the cross prod of blade dir and impact normal, covers degen(stab) case by just using impact normal
+	//this is just the blade plane or cut plane recieved from the weapon
 	void ComputeSlicePlane(const FDismembermentHitData& HitData, FVector& OutPlaneNormal, FVector& OutPlanePosition) const;
 
 	//splits and generates a cap

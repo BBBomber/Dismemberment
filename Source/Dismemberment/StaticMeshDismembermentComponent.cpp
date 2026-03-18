@@ -1,6 +1,7 @@
 #include "StaticMeshDismembermentComponent.h"
 #include "DismembermentTypes.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "KismetProceduralMeshLibrary.h"
 
 UStaticMeshDismembermentComponent::UStaticMeshDismembermentComponent()
@@ -34,6 +35,15 @@ void UStaticMeshDismembermentComponent::ProcessHit_Implementation(const FDismemb
     FVector PlaneNormal;
     FVector PlanePosition;
     ComputeSlicePlane(HitData, PlaneNormal, PlanePosition);
+    DrawDebugSolidPlane(
+        GetWorld(),
+        FPlane(PlanePosition, PlaneNormal),
+        PlanePosition,
+        50.f,
+        FColor::Red,
+        false,
+        3.f
+    );
     ExecuteSlice(PlanePosition, PlaneNormal, HitData.SwingID);
 }
 
@@ -95,7 +105,7 @@ void UStaticMeshDismembermentComponent::ConvertToProceduralMesh()
 void UStaticMeshDismembermentComponent::ComputeSlicePlane(const FDismembermentHitData& HitData, FVector& OutPlaneNormal, FVector& OutPlanePosition) const
 {
     OutPlanePosition = HitData.HitResult.ImpactPoint;
-    OutPlaneNormal = FVector::CrossProduct(HitData.BladeDirection, HitData.HitResult.ImpactNormal).GetSafeNormal();
+    OutPlaneNormal = HitData.BladeDirection;
 
     if (OutPlaneNormal.IsNearlyZero())
         OutPlaneNormal = HitData.HitResult.ImpactNormal;

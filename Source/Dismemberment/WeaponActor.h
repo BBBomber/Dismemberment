@@ -42,10 +42,9 @@ private:
 	FVector LastFrameTipPosition;
 	FVector LastFrameBasePosition;
 
-	//reads tip and base socket pos
-	//blade dir is the delta bw tip socket pos last frame and this frame. 
-	//runs a sweep using the full len of the blade using the tow sockets
-	//calls dispatch hit
+	//sweep using a capsule from blade base to tip in len and from prev base to current tip
+	//gets the cut plane or blade plane which is just the cros prod of the base to top dir and tip curr - tip prev dir
+	//then dispaches that plus hit result
 	void PerformBladeTrace();
 
 	//check for the IDismemberable interface and calls
