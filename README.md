@@ -9,7 +9,7 @@ A runtime dismemberment system for Unreal Engine 5, written entirely in C++ with
 
 During the players swing animation, the weaapon(has base and tip socket) runs a sweep trace called from an anim state(start is prev base and end is current tip socket).
 
-When it hits an object implementing the IDismemberable interface, it gets the cut plan using the cross product of the base to tip dir and the tip delta dir. The weapon passes this onto the static/skeleton dismemberment comp.
+When it hits an object implementing the IDismemberable interface, it gets the cut plane using the cross product of the base to tip dir and the tip delta dir. The weapon passes this onto the static/skeleton dismemberment comp.
 
 If it hit a static mesh, the mesh gets split along that plane into two pieces that fall apart and can be cut again until slice depth on the new actors hit 0. (configurable in bp)
 
